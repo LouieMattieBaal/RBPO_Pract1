@@ -1,0 +1,45 @@
+# 1) Определяем правила запуска всего конвейера (workflow)
+workflow:
+  rules:
+    # Конвейер запускается ТОЛЬКО при создании или обновлении Merge Request в ветку main или master
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/
+      when: always
+    # Во всех остальных случаях (пуш в ветку, запланированный запуск и т.д.) - не запускаем
+    - when: never
+
+# 2) Определяем этапы (stages) конвейера. У нас один этап - сборка.
+stages:
+  - build
+
+# 3) Определяем работу (job) с именем "build-jar"
+build-jar:
+  # 3a) Привязываем работу к этапу "build"
+  stage: build
+
+  # 3b) Указываем runner (исполнитель) для Linux
+  tags:
+    - saas-linux-small-amd64
+
+  # 3c) Указываем Docker-образ, найденный на шаге 1
+  image: maven:3.9-eclipse-temurin-21
+
+  # 3d) Определяем скрипты, которые будут выполнены внутри контейнера
+  script:
+    # Проверяем, есть ли в проекте скрипт mvnw (wrapper)
+    - if [ -f "./mvnw" ]; then
+        # Если есть, используем его. Даём права на выполнение для гарантии.
+        chmod +x ./mvnw &&
+        ./mvnw clean package;
+      else
+        # Если нет, используем глобальную утилиту mvn из контейнера
+        mvn clean package;
+      fi
+
+  # 3e) Сохраняем результаты сборки (артефакты)
+  artifacts:
+    paths:
+      # Сохраняем все JAR-файлы из папки target
+      - ./target/*.jar
+    # Артефакты будут храниться даже если job завершится успешно (по умолчанию - только при failure)
+    expire_in: 1 week
+    when: always
